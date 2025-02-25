@@ -1,0 +1,18 @@
+[project]
+name = "llm-opt"
+version = "0.1.0"
+description = "Matrix Multiplication Optimization using DeepSeek API"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.2.3",
+    "requests>=2.31.0",
+]
+
+[project.scripts]
+llm-opt = "main:main"
+
+[dependency-groups]
+dev = [
+    "ipykernel>=6.29.5",
+]
