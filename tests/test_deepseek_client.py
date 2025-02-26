@@ -82,27 +82,13 @@ class TestDeepSeekAPIClient(unittest.TestCase):
         This implementation adds the two arrays element-wise.
         """
 
-        code = extract_code_from_response(response, "test_func")
-        self.assertIn("void test_func", code)
-        self.assertIn("output[i] = a[i] + b[i]", code)
-
-    def test_extract_code_from_response_direct(self):
-        """Test extracting code from a direct response."""
-        response = """
-        void test_func(double* a, int a_size, double* b, int b_size, double* output, int output_size) {
-            for (int i = 0; i < a_size && i < output_size; i++) {
-                output[i] = a[i] + b[i];
-            }
-        }
-        """
-
-        code = extract_code_from_response(response, "test_func")
+        code = extract_code_from_response(response)
         self.assertIn("void test_func", code)
         self.assertIn("output[i] = a[i] + b[i]", code)
 
     def test_extract_code_from_response_none(self):
         """Test extracting code from a None response."""
-        code = extract_code_from_response(None, "test_func")
+        code = extract_code_from_response(None)
         self.assertEqual(code, "")
 
 

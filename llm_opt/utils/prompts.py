@@ -17,7 +17,7 @@ def gen_initial_prompt(numpy_source, function_signature):
         """
 
 
-def gen_update_prompt(numpy_source, function_signature, c_implementation, feedback):
+def gen_update_prompt(numpy_source, function_signature, artifacts_str):
     return f"""
             I need you to translate the NumPy function to an optimized C implementation.
             
@@ -31,15 +31,32 @@ def gen_update_prompt(numpy_source, function_signature, c_implementation, feedba
 {function_signature}
             ```
             
-            Your previous implementation was:
-            ```c
-{c_implementation}
-            ```
+            Here are artifacts from previous iterations:
+{artifacts_str}
             
-            Here's feedback on your implementation:
+            Consider exploring these optimization techniques:
             
-            {feedback}
+            Vectorization:
+            - Use SIMD instructions (SSE, AVX, NEON) for parallel operations
+            - Align data to vector boundaries for efficient SIMD access
+            - Vectorize inner loops where possible
+            
+            Memory access optimizations:
+            - Implement cache blocking/tiling to improve cache utilization
+            - Optimize data layout for better spatial locality
+            - Use prefetching to reduce cache misses
+
+            Loop optimizations:
+            - Unroll loops to reduce branch prediction misses
+            - Fuse loops to reduce loop overhead
+            - Interchange loops to improve memory access patterns
+            
+            Algorithm improvements:
+            - Look for mathematical simplifications
+            - Consider specialized algorithms for common patterns
+            - Reduce redundant computation
+
             
             Please provide an improved implementation.
-            Return ONLY the C function implementation, not the entire file.
+            Return ONLY the C function implementation in ```c ... ``` tags, not the entire file.
             """

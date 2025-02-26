@@ -1,7 +1,9 @@
 import numpy as np
-from llm_opt import optimize, DeepSeekAPIClient
+from llm_opt import DeepSeekAPIClient
 from llm_opt.core.signature import Signature
 from llm_opt.core.type_interface import DOUBLE
+from llm_opt.utils.helpers import ensure_directory_exists
+from llm_opt.core.optimizer import Optimizer
 
 
 def vec_add(a, b, out):
@@ -17,7 +19,9 @@ def vec_add_inputs():
 
 
 def main():
-    optimize(
+    output_dir = "results"
+    ensure_directory_exists(output_dir)
+    Optimizer(
         vec_add,
         Signature(
             [
@@ -27,11 +31,11 @@ def main():
             ]
         ),
         vec_add_inputs,
+        DeepSeekAPIClient(),
         5,
         100,
-        "results",
-        DeepSeekAPIClient(),
-    )
+        output_dir,
+    ).optimize()
 
 
 if __name__ == "__main__":

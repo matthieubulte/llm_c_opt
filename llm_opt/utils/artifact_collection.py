@@ -4,9 +4,10 @@ from typing import Dict, Any
 
 from llm_opt.utils.logging_config import logger
 from llm_opt.utils.helpers import ensure_directory_exists
+from llm_opt.core.iteration_artifact import IterationArtifact
 
 
-class LLMOptimizerArtifactLogger:
+class ArtifactCollection:
     """
     Logs artifacts from the optimization process.
     """
@@ -14,6 +15,7 @@ class LLMOptimizerArtifactLogger:
     def __init__(self, run_dir: str, func_name: str):
         self.run_dir = run_dir
         self.func_name = func_name
+        self.artifacts = []
 
     def log_func_info(self, func_info: Dict[str, Any]):
         func_info_path = os.path.join(self.run_dir, "function_info.json")
@@ -25,42 +27,45 @@ class LLMOptimizerArtifactLogger:
         with open(initial_prompt_path, "w") as f:
             f.write(initial_prompt)
 
-    def save_iteration_artifacts(
+    def add_artifact(self, artifact: IterationArtifact):
+        self.artifacts.append(artifact)
+        self._save_iteration_artifacts(artifact)
+
+    def to_str(self):
+        return "\n".join([artifact.short_desc() for artifact in self.artifacts])
+
+    def _save_iteration_artifacts(
         self,
-        iteration: int,
-        c_implementation: str,
-        prompt: str,
-        response: str,
-        test_results: Dict[str, Any],
+        artifact: IterationArtifact,
     ):
         """
         Save artifacts from an optimization iteration.
         """
         iteration_dir = os.path.join(
-            self.run_dir, "iterations", f"iteration_{iteration}"
+            self.run_dir, "iterations", f"iteration_{artifact.idx}"
         )
         ensure_directory_exists(iteration_dir)
 
         # Save the C implementation
         c_file_path = os.path.join(iteration_dir, f"{self.func_name}.c")
         with open(c_file_path, "w") as f:
-            f.write(c_implementation)
+            f.write(artifact.c_code)
 
         # Save the prompt
         prompt_path = os.path.join(iteration_dir, "prompt.txt")
         with open(prompt_path, "w") as f:
-            f.write(prompt)
+            f.write(artifact.prompt)
 
         # Save the response
         response_path = os.path.join(iteration_dir, "response.txt")
         with open(response_path, "w") as f:
-            f.write(response)
+            f.write(artifact.response)
 
         # Save the test results
-        test_results_path = os.path.join(iteration_dir, "test_results.json")
+        test_results_path = os.path.join(iteration_dir, "artifact.txt")
         with open(test_results_path, "w") as f:
-            json.dump(test_results, f, indent=2)
+            f.write(artifact.short_desc())
 
         # Log the results
-        logger.info(f"Iteration {iteration} results:")
-        logger.info(f"  Test results: {test_results}")
+        logger.info(f"Iteration {artifact.idx} results:")
+        logger.info(f"\tShort desc results: {artifact.short_desc()}")
