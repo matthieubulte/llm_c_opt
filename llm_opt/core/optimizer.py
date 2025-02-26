@@ -3,6 +3,7 @@ import time
 import inspect
 import datetime
 import numpy as np
+import logging
 from typing import Callable, Optional
 import hashlib
 
@@ -18,10 +19,6 @@ from llm_opt.core.performance_report import PerformanceReport
 
 
 class Optimizer:
-    """
-    Base class for optimizers that translate NumPy functions to optimized code.
-    """
-
     def __init__(
         self,
         func: Callable,
@@ -35,53 +32,34 @@ class Optimizer:
     ):
         self.func = func
         self.signature = signature
+        self.test_input_generator = test_input_generator
+        self.api_client = api_client
+        self.err_tol = err_tol
         self.max_iterations = max_iterations
         self.benchmark_runs = benchmark_runs
-        self.numpy_source = inspect.getsource(func)
-        self.test_input_generator = test_input_generator
-        self.err_tol = err_tol
-        self.best_artifact = None
+
         self.seen_implementations_hashes = set()
 
-        # Create a unique run folder
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.run_id = f"{func.__name__}_{timestamp}"
-        self.run_dir = os.path.join(output_dir, self.run_id)
+        self.output_dir = output_dir
+        self._setup_run_dir()
 
-        # Create directory structure
-        ensure_directory_exists(self.run_dir)
-        ensure_directory_exists(os.path.join(self.run_dir, "iterations"))
-
-        # Set up a file logger for this run
         self.log_file = os.path.join(self.run_dir, "optimization.log")
         self._setup_file_logger()
-
         logger.info(f"Created run directory: {self.run_dir}")
 
         self.artifacts = ArtifactCollection(self.run_dir, func.__name__)
-        self.api_client = api_client
 
     def optimize(self) -> Optional[str]:
         signature_str = self.signature.generate_c_function_signature(self.func.__name__)
-        initial_prompt = gen_initial_prompt(self.numpy_source, signature_str)
+        numpy_source = inspect.getsource(self.func)
+        initial_prompt = gen_initial_prompt(numpy_source, signature_str)
 
         logger.info(f"Starting optimization loop for function {self.func.__name__}")
-        logger.debug(f"Function source:\n{self.numpy_source}")
-        logger.debug(f"Function signature:\n{self.signature}")
+        logger.info(f"Function source:\n{numpy_source}")
+        logger.info(f"Function signature:\n{signature_str}")
 
-        # Save the initial function information
-        func_info = {
-            "function_name": self.func.__name__,
-            "numpy_source": self.numpy_source,
-            "function_signature": signature_str,
-        }
-
-        # Just to be sure, warm up the numpy implementation
         for _ in range(self.benchmark_runs):
             self.func(*self.test_input_generator())
-
-        self.artifacts.log_func_info(func_info)
-        self.artifacts.log_initial_prompt(initial_prompt)
 
         current_prompt = initial_prompt
 
@@ -93,7 +71,6 @@ class Optimizer:
                 logger.error("Failed to get response from API")
                 break
 
-            # Extract the C implementation
             c_implementation = extract_code_from_response(response)
             artifact = IterationArtifact(
                 iteration + 1,
@@ -105,34 +82,20 @@ class Optimizer:
 
             logger.info(f"Testing implementation.")
             self.test_implementation(c_implementation, artifact)
-
-            if artifact.success and artifact.performance_report.speedup_medians() > (
-                self.best_artifact.performance_report.speedup_medians()
-                if self.best_artifact
-                else 0
-            ):
-                self.best_artifact = artifact
-                logger.info(
-                    f"Iteration {iteration + 1} is the new best implementation!"
-                )
-            else:
-                logger.info(f"No improvement in iteration {iteration + 1}.")
-
-            self.artifacts._save_iteration_artifact(artifact)  # save after run
-            if self.best_artifact:
-                self.artifacts.checkpoint(self.best_artifact)
+            self.artifacts.checkpoint()
 
             if iteration < self.max_iterations - 1:
                 current_prompt = gen_update_prompt(
-                    self.numpy_source,
+                    numpy_source,
                     self.signature.generate_c_function_signature(self.func.__name__),
                     self.artifacts.to_str(),
                 )
 
         logger.info("=" * 80)
-        logger.info(f"Best implementation\n {self.best_artifact.short_desc()}")
+        logger.info(
+            f"Best implementation\n {self.artifacts.get_best_artifact().short_desc()}"
+        )
         logger.info("=" * 80)
-        return self.best_artifact
 
     def test_implementation(self, c_implementation: str, artifact: IterationArtifact):
         implementation_hash = hashlib.sha256(c_implementation.encode()).hexdigest()
@@ -156,8 +119,11 @@ class Optimizer:
             artifact.error = err_str
             return
 
-        verification_passed, err_str = self.verify_against_numpy(c_function)
-        if not verification_passed:
+        try:
+            self.verify_against_numpy(c_function)
+        except Exception as e:
+            err_str = f"Error during verification:\n {e}"
+            logger.error(err_str, exc_info=True)
             artifact.success = False
             artifact.error = err_str
             return
@@ -176,7 +142,6 @@ class Optimizer:
 
         # Time the C implementation
         c_args = self.signature.python_args_to_c_args(test_inputs_tuple)
-
         for _ in range(self.benchmark_runs):
             start_time = time.time()
             c_function(*c_args)
@@ -184,49 +149,35 @@ class Optimizer:
 
         return perf_report
 
-    def verify_against_numpy(self, c_function: CFunction) -> tuple[bool, Optional[str]]:
-        """
-        Verify the C implementation against the original NumPy function.
-        Generate test data, run both implementations, and compare results.
-        """
-        try:
-            for _ in range(self.benchmark_runs):
-                test_inputs_tuple = self.test_input_generator()
+    def verify_against_numpy(self, c_function: CFunction):
+        for _ in range(self.benchmark_runs):
+            test_inputs_tuple = self.test_input_generator()
 
-                np_args = [np.copy(arg) for arg in test_inputs_tuple]
-                np_output = np_args[-1]
+            np_args = [np.copy(arg) for arg in test_inputs_tuple]
+            np_output = np_args[-1]
 
-                c_args_np = [np.copy(arg) for arg in test_inputs_tuple]
-                c_args = self.signature.python_args_to_c_args(c_args_np)
-                c_output = c_args_np[-1]
+            c_args_np = [np.copy(arg) for arg in test_inputs_tuple]
+            c_args = self.signature.python_args_to_c_args(c_args_np)
+            c_output = c_args_np[-1]
 
-                self.func(*np_args)
-                c_function(*c_args)
+            self.func(*np_args)
+            c_function(*c_args)
 
-                assert_outputs_equal(np_output, c_output, self.err_tol)
-
-            return True, None
-
-        except Exception as e:
-            err_str = f"Error during verification:\n {e}"
-            logger.error(err_str, exc_info=True)
-            return False, err_str
+            assert_outputs_equal(np_output, c_output, self.err_tol)
 
     def _setup_file_logger(self):
-        """Set up a file handler for logging to the run directory."""
-        import logging
-
-        # Create a file handler for this run
         file_handler = logging.FileHandler(self.log_file)
         file_handler.setLevel(logging.DEBUG)
-
-        # Create a formatter
         formatter = logging.Formatter(
             "%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(funcName)s - %(message)s"
         )
         file_handler.setFormatter(formatter)
-
-        # Add the handler to the logger
         logger.addHandler(file_handler)
-
         logger.info(f"Logging to {self.log_file}")
+
+    def _setup_run_dir(self):
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.run_id = f"{self.func.__name__}_{timestamp}"
+        self.run_dir = os.path.join(self.output_dir, self.run_id)
+        ensure_directory_exists(self.run_dir)
+        ensure_directory_exists(os.path.join(self.run_dir, "iterations"))

@@ -19,16 +19,6 @@ class ArtifactCollection:
         self.func_name = func_name
         self.artifacts = []
 
-    def log_func_info(self, func_info: Dict[str, Any]):
-        func_info_path = os.path.join(self.run_dir, "function_info.json")
-        with open(func_info_path, "w") as f:
-            json.dump(func_info, f, indent=2)
-
-    def log_initial_prompt(self, initial_prompt: str):
-        initial_prompt_path = os.path.join(self.run_dir, "initial_prompt.txt")
-        with open(initial_prompt_path, "w") as f:
-            f.write(initial_prompt)
-
     def add_artifact(self, artifact: IterationArtifact):
         self.artifacts.append(artifact)
         self._save_iteration_artifact(artifact)
@@ -72,10 +62,19 @@ class ArtifactCollection:
         logger.info(f"Iteration {artifact.idx} results:")
         logger.info(f"\tShort desc results: {artifact.short_desc()}")
 
-    def checkpoint(self, best_artifact: IterationArtifact):
+    def get_best_artifact(self):
+        return max(
+            self.artifacts,
+            key=lambda x: (
+                x.performance_report.speedup_medians() if x.performance_report else 0
+            ),
+        )
+
+    def checkpoint(self):
         self._save_iteration_artifact(self.artifacts[-1])
         html_path = os.path.join(self.run_dir, "artifacts.html")
         logger.info(f"Saving artifacts to {html_path}")
         to_html(self.artifacts, html_path)
+        best_artifact = self.get_best_artifact()
         with open(os.path.join(self.run_dir, "best_artifact.txt"), "w") as f:
             f.write(best_artifact.short_desc())

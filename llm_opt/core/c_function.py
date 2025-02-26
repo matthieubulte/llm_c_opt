@@ -1,7 +1,3 @@
-"""
-C function representation for the NumPy-to-C optimizer using the improved CFunction implementation.
-"""
-
 import os
 import tempfile
 import subprocess
@@ -17,14 +13,6 @@ class CFunction:
     """
 
     def __init__(self, func_name, signature, c_code):
-        """
-        Initialize a C function.
-
-        Args:
-            func_name: Name of the function
-            signature: Signature object containing arg_types and return_type
-            c_code: C implementation of the function
-        """
         self.c_code = c_code
         self.func_name = func_name
         self.signature = signature
@@ -66,20 +54,11 @@ class CFunction:
         self.func.restype = ctypes.c_void_p
 
     def __del__(self):
-        """
-        Clean up resources when the object is deleted.
-        """
         if hasattr(self, "lib") and self.lib:
             del self.lib
             self.lib = None
 
     def __call__(self, *args, **kwargs):
-        """
-        Call the C function with the given arguments.
-
-        Returns:
-            The result of the C function call
-        """
         if self.func is None:
             raise ValueError("Function not loaded. Call compile() and load() first.")
         return self.func(*args)
