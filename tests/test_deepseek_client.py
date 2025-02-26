@@ -1,7 +1,3 @@
-"""
-Tests for the DeepSeek API client.
-"""
-
 import unittest
 from unittest.mock import patch, MagicMock
 from llm_opt.api.clients import DeepSeekAPIClient, extract_code_from_response
@@ -11,7 +7,7 @@ from llm_opt.api.clients.deepseek import call_deepseek_api
 class TestDeepSeekAPIClient(unittest.TestCase):
     """Test the DeepSeekAPIClient class."""
 
-    @patch("llm_opt.api.deepseek.requests.post")
+    @patch("llm_opt.api.clients.deepseek.requests.post")
     def test_call_api_success(self, mock_post):
         """Test successful API call."""
         # Mock the response
@@ -35,7 +31,7 @@ class TestDeepSeekAPIClient(unittest.TestCase):
         self.assertEqual(kwargs["headers"]["Authorization"], "Bearer test_key")
         self.assertEqual(kwargs["json"]["messages"][1]["content"], "test prompt")
 
-    @patch("llm_opt.api.deepseek.requests.post")
+    @patch("llm_opt.api.clients.deepseek.requests.post")
     def test_call_api_error(self, mock_post):
         """Test API call with error."""
         # Mock the response to raise an exception

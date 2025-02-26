@@ -7,14 +7,6 @@ from llm_opt.core.iteration_artifact import IterationArtifact
 from datetime import datetime
 
 
-import os
-import json
-from typing import List, Dict, Any
-import base64
-from llm_opt.core.performance_report import PerformanceReport
-from datetime import datetime
-
-
 def to_html(artifacts: List[IterationArtifact], out_path: str):
     """
     Generate an interactive HTML page to visualize the optimization process.
@@ -39,9 +31,9 @@ def to_html(artifacts: List[IterationArtifact], out_path: str):
         if artifact.performance_report:
             report = artifact.performance_report
             iteration_data["performance"] = {
-                "speedup": report.avg_speedup(),
-                "c_avg": report.avg_c_speed() * 1000,  # Convert to ms
-                "numpy_avg": report.avg_numpy_speed() * 1000,  # Convert to ms
+                "speedup": report.speedup_medians(),
+                "c_median": report.median_c_runtime() * 1000,  # Convert to ms
+                "numpy_median": report.median_numpy_runtime() * 1000,  # Convert to ms
                 "c_quantiles": report.calculate_c_quantiles(),
                 "numpy_quantiles": report.calculate_numpy_quantiles(),
             }
@@ -50,7 +42,332 @@ def to_html(artifacts: List[IterationArtifact], out_path: str):
 
         iterations_data.append(iteration_data)
 
-    # Create the HTML content
+    # Create output directory if it doesn't exist
+    output_dir = os.path.dirname(out_path)
+    if output_dir and not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    # Create JavaScript file
+    js_filename = os.path.splitext(os.path.basename(out_path))[0] + ".js"
+    js_path = os.path.join(output_dir, js_filename)
+
+    # Write the JavaScript file
+    with open(js_path, "w") as f:
+        f.write(
+            """
+// Store the iteration data
+const iterationsData = ITERATIONS_DATA_PLACEHOLDER;
+let currentIteration = null;
+let speedupChart = null;
+let runtimeChart = null;
+
+// Initialize the page
+function initPage() {
+    populateIterationsList();
+    createSpeedupChart();
+    createRuntimeChart();
+    
+    // Show the first iteration by default
+    if (iterationsData.length > 0) {
+        showIteration(iterationsData[0].idx);
+    }
+}
+
+// Populate the iterations list in the sidebar
+function populateIterationsList() {
+    const container = document.getElementById('iterations-list');
+    
+    iterationsData.forEach(iteration => {
+        const item = document.createElement('div');
+        item.className = 'sidebar-item';
+        item.dataset.idx = iteration.idx;
+        
+        let statusBadge = '';
+        if (iteration.success) {
+            statusBadge = '<span class="badge badge-success">Success</span>';
+        } else {
+            statusBadge = '<span class="badge badge-error">Error</span>';
+        }
+        
+        item.innerHTML = 'Iteration ' + iteration.idx + ' ' + statusBadge;
+        
+        item.addEventListener('click', () => {
+            showIteration(iteration.idx);
+        });
+        
+        container.appendChild(item);
+    });
+}
+
+// Show details for a specific iteration
+function showIteration(idx) {
+    // Update active state in sidebar
+    document.querySelectorAll('.sidebar-item').forEach(item => {
+        if (parseInt(item.dataset.idx) === idx) {
+            item.classList.add('active');
+        } else {
+            item.classList.remove('active');
+        }
+    });
+    
+    // Find the iteration data
+    currentIteration = iterationsData.find(item => item.idx === idx);
+    
+    if (!currentIteration) return;
+    
+    // Update the details panel
+    const detailsContainer = document.getElementById('iteration-details');
+    
+    let statusText = currentIteration.success ? 
+        '<span class="success">Success</span>' : 
+        '<span class="error">Error: ' + currentIteration.error + '</span>';
+    
+    let performanceHtml = '';
+    if (currentIteration.performance) {
+        const perf = currentIteration.performance;
+        
+        // Create a combined quantiles table
+        let combinedQuantilesTable = '<table class="combined-quantiles">' +
+                                    '<tr><th>Quantile</th><th>C Time (ms)</th><th>NumPy Time (ms)</th><th>Ratio</th></tr>';
+        
+        // Assuming the quantiles are the same for both implementations
+        Object.keys(perf.c_quantiles).forEach(q => {
+            const cTime = (perf.c_quantiles[q] * 1000).toFixed(4);
+            const numpyTime = (perf.numpy_quantiles[q] * 1000).toFixed(4);
+            const ratio = (perf.numpy_quantiles[q] / perf.c_quantiles[q]).toFixed(2);
+            combinedQuantilesTable += '<tr>' +
+                                     '<td>' + (parseFloat(q) * 100).toFixed(1) + '%</td>' +
+                                     '<td>' + cTime + ' ms</td>' +
+                                     '<td>' + numpyTime + ' ms</td>' +
+                                     '<td>' + ratio + 'x</td>' +
+                                     '</tr>';
+        });
+        combinedQuantilesTable += '</table>';
+        
+        performanceHtml = 
+            '<h3>Performance Metrics</h3>' +
+            '<div class="performance-summary">' +
+                '<div class="performance-card summary-card">' +
+                    '<div class="metric-group">' +
+                        '<h4>Speedup: ' + perf.speedup.toFixed(2) + 'x</h4>' +
+                    '</div>' +
+                    '<div class="metric-group">' +
+                        combinedQuantilesTable +
+                    '</div>' +
+                '</div>' +
+            '</div>';
+    }
+    
+    detailsContainer.innerHTML = 
+        '<h2>Iteration ' + currentIteration.idx + ' ' + statusText + '</h2>' +
+        
+        performanceHtml +
+        
+        '<div class="tab-container">' +
+            '<div class="tab-buttons">' +
+                '<button class="tab-button active" data-tab="c-code">C Code</button>' +
+                '<button class="tab-button" data-tab="prompt">Prompt</button>' +
+                '<button class="tab-button" data-tab="response">Response</button>' +
+            '</div>' +
+            
+            '<div id="c-code" class="tab-content active">' +
+                '<pre><code class="language-c">' + escapeHtml(currentIteration.c_code) + '</code></pre>' +
+            '</div>' +
+            
+            '<div id="prompt" class="tab-content">' +
+                '<pre><code>' + escapeHtml(currentIteration.prompt) + '</code></pre>' +
+            '</div>' +
+            
+            '<div id="response" class="tab-content">' +
+                '<pre><code>' + escapeHtml(currentIteration.response) + '</code></pre>' +
+            '</div>' +
+        '</div>';
+    
+    // Setup tab buttons
+    document.querySelectorAll('.tab-button').forEach(button => {
+        button.addEventListener('click', () => {
+            const tabId = button.dataset.tab;
+            
+            // Update active state of buttons
+            document.querySelectorAll('.tab-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            button.classList.add('active');
+            
+            // Show the selected tab
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(tabId).classList.add('active');
+        });
+    });
+    
+    // Apply syntax highlighting
+    document.querySelectorAll('pre code').forEach((block) => {
+        hljs.highlightElement(block);
+    });
+}
+
+// Create the speedup chart
+function createSpeedupChart() {
+    const ctx = document.getElementById('speedupChart').getContext('2d');
+    
+    // Prepare chart data
+    const labels = [];
+    const speedups = [];
+    
+    iterationsData.forEach(iteration => {
+        labels.push('Iteration ' + iteration.idx);
+        if (iteration.performance) {
+            speedups.push(iteration.performance.speedup);
+        } else {
+            speedups.push(null);
+        }
+    });
+    
+    speedupChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Speedup (NumPy/C)',
+                data: speedups,
+                backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 2,
+                pointBackgroundColor: 'rgba(54, 162, 235, 1)',
+                pointRadius: 5,
+                pointHoverRadius: 7,
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Speedup Progression',
+                    font: {
+                        size: 16
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return 'Speedup: ' + context.raw.toFixed(2) + 'x';
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Speedup (higher is better)'
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Create the runtime chart
+function createRuntimeChart() {
+    const ctx = document.getElementById('runtimeChart').getContext('2d');
+    
+    // Prepare chart data
+    const labels = [];
+    const cRuntimes = [];
+    const numpyRuntimes = [];
+    
+    iterationsData.forEach(iteration => {
+        labels.push('Iteration ' + iteration.idx);
+        if (iteration.performance) {
+            cRuntimes.push(iteration.performance.c_median);    
+            numpyRuntimes.push(iteration.performance.numpy_median);
+        } else {
+            cRuntimes.push(null);
+            numpyRuntimes.push(null);
+        }
+    });
+    
+    runtimeChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'C Implementation',
+                    data: cRuntimes,
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    borderWidth: 2,
+                    pointBackgroundColor: 'rgba(75, 192, 192, 1)',
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
+                    tension: 0.1
+                },
+                {
+                    label: 'NumPy Implementation',
+                    data: numpyRuntimes,
+                    backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    borderWidth: 2,
+                    pointBackgroundColor: 'rgba(255, 99, 132, 1)',
+                    pointRadius: 5,
+                    pointHoverRadius: 7,
+                    tension: 0.1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Runtime Comparison',
+                    font: {
+                        size: 16
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return context.dataset.label + ': ' + context.raw.toFixed(4) + ' ms';
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    title: {
+                        display: true,
+                        text: 'Runtime (ms, lower is better)'
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Utility function to escape HTML
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Initialize the page when loaded
+document.addEventListener('DOMContentLoaded', initPage);
+""".replace(
+                "ITERATIONS_DATA_PLACEHOLDER", json.dumps(iterations_data)
+            )
+        )
+
+    # Create the HTML file
     html_content = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -146,16 +463,32 @@ def to_html(artifacts: List[IterationArtifact], out_path: str):
             height: 400px;
             margin-bottom: 30px;
         }}
-        .performance-grid {{
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
+        .performance-summary {{
+            margin-bottom: 20px;
         }}
-        .performance-card {{
+        .summary-card {{
             background-color: #f8f9fa;
             border-radius: 8px;
             padding: 15px;
             box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }}
+        .metric-group {{
+            margin-bottom: 15px;
+        }}
+        .metric-group:last-child {{
+            margin-bottom: 0;
+        }}
+        .combined-quantiles {{
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }}
+        .combined-quantiles th, .combined-quantiles td {{
+            padding: 8px 10px;
+            text-align: right;
+        }}
+        .combined-quantiles th:first-child, .combined-quantiles td:first-child {{
+            text-align: left;
         }}
         .success {{
             color: #28a745;
@@ -244,315 +577,7 @@ def to_html(artifacts: List[IterationArtifact], out_path: str):
         </div>
     </div>
     
-    <script>
-        // Store the iteration data
-        const iterationsData = {json.dumps(iterations_data)};
-        let currentIteration = null;
-        let speedupChart = null;
-        let runtimeChart = null;
-        
-        // Initialize the page
-        function initPage() {{
-            populateIterationsList();
-            createSpeedupChart();
-            createRuntimeChart();
-            
-            // Show the first iteration by default
-            if (iterationsData.length > 0) {{
-                showIteration(iterationsData[0].idx);
-            }}
-        }}
-        
-        // Populate the iterations list in the sidebar
-        function populateIterationsList() {{
-            const container = document.getElementById('iterations-list');
-            
-            iterationsData.forEach(iteration => {{
-                const item = document.createElement('div');
-                item.className = 'sidebar-item';
-                item.dataset.idx = iteration.idx;
-                
-                let statusBadge = '';
-                if (iteration.success) {{
-                    statusBadge = '<span class="badge badge-success">Success</span>';
-                }} else {{
-                    statusBadge = '<span class="badge badge-error">Error</span>';
-                }}
-                
-                item.innerHTML = 'Iteration ' + iteration.idx + ' ' + statusBadge;
-                
-                item.addEventListener('click', () => {{
-                    showIteration(iteration.idx);
-                }});
-                
-                container.appendChild(item);
-            }});
-        }}
-        
-        // Show details for a specific iteration
-        function showIteration(idx) {{
-            // Update active state in sidebar
-            document.querySelectorAll('.sidebar-item').forEach(item => {{
-                if (parseInt(item.dataset.idx) === idx) {{
-                    item.classList.add('active');
-                }} else {{
-                    item.classList.remove('active');
-                }}
-            }});
-            
-            // Find the iteration data
-            currentIteration = iterationsData.find(item => item.idx === idx);
-            
-            if (!currentIteration) return;
-            
-            // Update the details panel
-            const detailsContainer = document.getElementById('iteration-details');
-            
-            let statusText = currentIteration.success ? 
-                '<span class="success">Success</span>' : 
-                '<span class="error">Error: ' + currentIteration.error + '</span>';
-            
-            let performanceHtml = '';
-            if (currentIteration.performance) {{
-                const perf = currentIteration.performance;
-                
-                // Create tables for quantiles
-                let cQuantilesTable = '<table><tr><th>Quantile</th><th>Time (ms)</th></tr>';
-                Object.entries(perf.c_quantiles).forEach(([q, v]) => {{
-                    cQuantilesTable += '<tr><td>' + (parseFloat(q) * 100).toFixed(1) + '%</td><td>' + (v * 1000).toFixed(4) + ' ms</td></tr>';
-                }});
-                cQuantilesTable += '</table>';
-                
-                let numpyQuantilesTable = '<table><tr><th>Quantile</th><th>Time (ms)</th></tr>';
-                Object.entries(perf.numpy_quantiles).forEach(([q, v]) => {{
-                    numpyQuantilesTable += '<tr><td>' + (parseFloat(q) * 100).toFixed(1) + '%</td><td>' + (v * 1000).toFixed(4) + ' ms</td></tr>';
-                }});
-                numpyQuantilesTable += '</table>';
-                
-                performanceHtml = 
-                    '<h3>Performance Metrics</h3>' +
-                    '<div class="performance-grid">' +
-                        '<div class="performance-card">' +
-                            '<h4>Speedup: ' + perf.speedup.toFixed(2) + 'x</h4>' +
-                            '<p>C Implementation Average: ' + perf.c_avg.toFixed(4) + ' ms</p>' +
-                            '<p>NumPy Implementation Average: ' + perf.numpy_avg.toFixed(4) + ' ms</p>' +
-                        '</div>' +
-                        '<div class="performance-card">' +
-                            '<h4>C Implementation Quantiles</h4>' +
-                            cQuantilesTable +
-                        '</div>' +
-                        '<div class="performance-card">' +
-                            '<h4>NumPy Implementation Quantiles</h4>' +
-                            numpyQuantilesTable +
-                        '</div>' +
-                    '</div>';
-            }}
-            
-            detailsContainer.innerHTML = 
-                '<h2>Iteration ' + currentIteration.idx + ' ' + statusText + '</h2>' +
-                
-                performanceHtml +
-                
-                '<div class="tab-container">' +
-                    '<div class="tab-buttons">' +
-                        '<button class="tab-button active" data-tab="c-code">C Code</button>' +
-                        '<button class="tab-button" data-tab="prompt">Prompt</button>' +
-                        '<button class="tab-button" data-tab="response">Response</button>' +
-                    '</div>' +
-                    
-                    '<div id="c-code" class="tab-content active">' +
-                        '<pre><code class="language-c">' + escapeHtml(currentIteration.c_code) + '</code></pre>' +
-                    '</div>' +
-                    
-                    '<div id="prompt" class="tab-content">' +
-                        '<pre><code>' + escapeHtml(currentIteration.prompt) + '</code></pre>' +
-                    '</div>' +
-                    
-                    '<div id="response" class="tab-content">' +
-                        '<pre><code>' + escapeHtml(currentIteration.response) + '</code></pre>' +
-                    '</div>' +
-                '</div>';
-            
-            // Setup tab buttons
-            document.querySelectorAll('.tab-button').forEach(button => {{
-                button.addEventListener('click', () => {{
-                    const tabId = button.dataset.tab;
-                    
-                    // Update active state of buttons
-                    document.querySelectorAll('.tab-button').forEach(btn => {{
-                        btn.classList.remove('active');
-                    }});
-                    button.classList.add('active');
-                    
-                    // Show the selected tab
-                    document.querySelectorAll('.tab-content').forEach(content => {{
-                        content.classList.remove('active');
-                    }});
-                    document.getElementById(tabId).classList.add('active');
-                }});
-            }});
-            
-            // Apply syntax highlighting
-            document.querySelectorAll('pre code').forEach((block) => {{
-                hljs.highlightElement(block);
-            }});
-        }}
-        
-        // Create the speedup chart
-        function createSpeedupChart() {{
-            const ctx = document.getElementById('speedupChart').getContext('2d');
-            
-            // Prepare chart data
-            const labels = [];
-            const speedups = [];
-            
-            iterationsData.forEach(iteration => {{
-                labels.push(`Iteration ${{iteration.idx}}`);
-                if (iteration.performance) {{
-                    speedups.push(iteration.performance.speedup);
-                }} else {{
-                    speedups.push(null);
-                }}
-            }});
-            
-            speedupChart = new Chart(ctx, {{
-                type: 'line',
-                data: {{
-                    labels: labels,
-                    datasets: [{{
-                        label: 'Speedup (NumPy/C)',
-                        data: speedups,
-                        backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                        borderColor: 'rgba(54, 162, 235, 1)',
-                        borderWidth: 2,
-                        pointBackgroundColor: 'rgba(54, 162, 235, 1)',
-                        pointRadius: 5,
-                        pointHoverRadius: 7,
-                        tension: 0.1
-                    }}]
-                }},
-                options: {{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {{
-                        title: {{
-                            display: true,
-                            text: 'Speedup Progression',
-                            font: {{
-                                size: 16
-                            }}
-                        }},
-                        tooltip: {{
-                            callbacks: {{
-                                label: function(context) {{
-                                    return 'Speedup: ' + context.raw.toFixed(2) + 'x';
-                                }}
-                            }}
-                        }}
-                    }},
-                    scales: {{
-                        y: {{
-                            beginAtZero: true,
-                            title: {{
-                                display: true,
-                                text: 'Speedup (higher is better)'
-                            }}
-                        }}
-                    }}
-                }}
-            }});
-        }}
-        
-        // Create the runtime chart
-        function createRuntimeChart() {{
-            const ctx = document.getElementById('runtimeChart').getContext('2d');
-            
-            // Prepare chart data
-            const labels = [];
-            const cRuntimes = [];
-            const numpyRuntimes = [];
-            
-            iterationsData.forEach(iteration => {{
-                labels.push(`Iteration ${{iteration.idx}}`);
-                if (iteration.performance) {{
-                    cRuntimes.push(iteration.performance.c_avg);
-                    numpyRuntimes.push(iteration.performance.numpy_avg);
-                }} else {{
-                    cRuntimes.push(null);
-                    numpyRuntimes.push(null);
-                }}
-            }});
-            
-            runtimeChart = new Chart(ctx, {{
-                type: 'line',
-                data: {{
-                    labels: labels,
-                    datasets: [
-                        {{
-                            label: 'C Implementation',
-                            data: cRuntimes,
-                            backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                            borderColor: 'rgba(75, 192, 192, 1)',
-                            borderWidth: 2,
-                            pointBackgroundColor: 'rgba(75, 192, 192, 1)',
-                            pointRadius: 5,
-                            pointHoverRadius: 7,
-                            tension: 0.1
-                        }},
-                        {{
-                            label: 'NumPy Implementation',
-                            data: numpyRuntimes,
-                            backgroundColor: 'rgba(255, 99, 132, 0.2)',
-                            borderColor: 'rgba(255, 99, 132, 1)',
-                            borderWidth: 2,
-                            pointBackgroundColor: 'rgba(255, 99, 132, 1)',
-                            pointRadius: 5,
-                            pointHoverRadius: 7,
-                            tension: 0.1
-                        }}
-                    ]
-                }},
-                options: {{
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {{
-                        title: {{
-                            display: true,
-                            text: 'Runtime Comparison',
-                            font: {{
-                                size: 16
-                            }}
-                        }},
-                        tooltip: {{
-                            callbacks: {{
-                                label: function(context) {{
-                                    return context.dataset.label + ': ' + context.raw.toFixed(4) + ' ms';
-                                }}
-                            }}
-                        }}
-                    }},
-                    scales: {{
-                        y: {{
-                            title: {{
-                                display: true,
-                                text: 'Runtime (ms, lower is better)'
-                            }}
-                        }}
-                    }}
-                }}
-            }});
-        }}
-        
-        // Utility function to escape HTML
-        function escapeHtml(text) {{
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }}
-        
-        // Initialize the page when loaded
-        document.addEventListener('DOMContentLoaded', initPage);
-    </script>
+    <script src="{js_filename}"></script>
 </body>
 </html>
 """
@@ -562,3 +587,4 @@ def to_html(artifacts: List[IterationArtifact], out_path: str):
         f.write(html_content)
 
     print(f"HTML visualization saved to {out_path}")
+    print(f"JavaScript file saved to {js_path}")

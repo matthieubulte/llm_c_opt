@@ -1,15 +1,9 @@
-"""
-DeepSeek API client for the NumPy-to-C optimizer.
-"""
-
 import requests
-import json
-import time
-from typing import Optional, Dict, Any
+from typing import Optional
 
 from llm_opt.utils.logging_config import logger
 from llm_opt.utils.constants import DEEPSEEK_API_KEY, DEEPSEEK_API_URL
-from llm_opt.api.clients.base import BaseAPIClient, extract_code_from_response
+from llm_opt.api.clients.base import BaseAPIClient
 
 
 class DeepSeekAPIClient(BaseAPIClient):

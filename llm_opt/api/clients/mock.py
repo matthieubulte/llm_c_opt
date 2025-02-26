@@ -1,8 +1,4 @@
-"""
-Mock API client for testing.
-"""
-
-from typing import Optional, Dict, Any, List
+from typing import Optional, List
 
 from llm_opt.api.clients.base import BaseAPIClient
 

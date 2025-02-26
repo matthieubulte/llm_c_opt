@@ -76,6 +76,10 @@ class Optimizer:
             "function_signature": signature_str,
         }
 
+        # Just to be sure, warm up the numpy implementation
+        for _ in range(self.benchmark_runs):
+            self.func(*self.test_input_generator())
+
         self.artifacts.log_func_info(func_info)
         self.artifacts.log_initial_prompt(initial_prompt)
 
@@ -91,39 +95,30 @@ class Optimizer:
 
             # Extract the C implementation
             c_implementation = extract_code_from_response(response)
-            implementation_hash = hashlib.sha256(c_implementation.encode()).hexdigest()
-            if implementation_hash in self.seen_implementations_hashes:
-                logger.info("Implementation proposed already seen, skipping")
-                continue
-            self.seen_implementations_hashes.add(implementation_hash)
-
-            c_function = CFunction(self.func.__name__, self.signature, c_implementation)
-
             artifact = IterationArtifact(
                 iteration + 1,
                 c_implementation,
                 current_prompt,
                 response,
             )
-
-            logger.info(f"Testing implementation.")
-            self.test_function(c_function, artifact)
-
-            # Save iteration artifacts
             self.artifacts.add_artifact(artifact)
 
-            if artifact.success and artifact.performance_report.avg_speedup() > (
-                self.best_artifact.performance_report.avg_speedup()
+            logger.info(f"Testing implementation.")
+            self.test_implementation(c_implementation, artifact)
+
+            if artifact.success and artifact.performance_report.speedup_medians() > (
+                self.best_artifact.performance_report.speedup_medians()
                 if self.best_artifact
                 else 0
             ):
                 self.best_artifact = artifact
                 logger.info(
-                    f"New best implementation: {self.best_artifact.short_desc()}"
+                    f"Iteration {iteration + 1} is the new best implementation!"
                 )
             else:
                 logger.info(f"No improvement in iteration {iteration + 1}.")
 
+            self.artifacts._save_iteration_artifact(artifact)  # save after run
             if self.best_artifact:
                 self.artifacts.checkpoint(self.best_artifact)
 
@@ -139,7 +134,19 @@ class Optimizer:
         logger.info("=" * 80)
         return self.best_artifact
 
-    def test_function(self, c_function: CFunction, artifact: IterationArtifact):
+    def test_implementation(self, c_implementation: str, artifact: IterationArtifact):
+        implementation_hash = hashlib.sha256(c_implementation.encode()).hexdigest()
+        if implementation_hash in self.seen_implementations_hashes:
+            err_str = f"Implementation proposed already seen, skipping"
+            logger.error(err_str, exc_info=True)
+            artifact.success = False
+            artifact.error = err_str
+            artifact.c_code = "[skipped]"
+            return
+        self.seen_implementations_hashes.add(implementation_hash)
+
+        c_function = CFunction(self.func.__name__, self.signature, c_implementation)
+
         try:
             c_function.compile_and_load()
         except Exception as e:

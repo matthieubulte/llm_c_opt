@@ -31,12 +31,12 @@ class ArtifactCollection:
 
     def add_artifact(self, artifact: IterationArtifact):
         self.artifacts.append(artifact)
-        self._save_iteration_artifacts(artifact)
+        self._save_iteration_artifact(artifact)
 
     def to_str(self):
         return "\n".join([artifact.short_desc() for artifact in self.artifacts])
 
-    def _save_iteration_artifacts(
+    def _save_iteration_artifact(
         self,
         artifact: IterationArtifact,
     ):
@@ -73,6 +73,7 @@ class ArtifactCollection:
         logger.info(f"\tShort desc results: {artifact.short_desc()}")
 
     def checkpoint(self, best_artifact: IterationArtifact):
+        self._save_iteration_artifact(self.artifacts[-1])
         html_path = os.path.join(self.run_dir, "artifacts.html")
         logger.info(f"Saving artifacts to {html_path}")
         to_html(self.artifacts, html_path)

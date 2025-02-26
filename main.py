@@ -11,7 +11,7 @@ def foo(a, b, out):
 
 
 def foo_inputs():
-    n = 1000
+    n = 100_000
     a = np.random.rand(n).astype(np.float64)
     b = np.random.rand(n).astype(np.float64)
     out = np.zeros(1).astype(np.float64)
@@ -22,13 +22,13 @@ def bar(a, n, k, out):
     a = a.reshape((n, n))
     tmp = a
     for _ in range(k):
-        tmp = a @ tmp
+        tmp = (a @ tmp) / n
     out[:] = tmp.mean()
 
 
 def bar_inputs():
-    n = 10
-    k = np.random.randint(1, 5)
+    n = 256
+    k = 10
     a = np.random.rand(n * n).reshape((n, n)).astype(np.float64)
     out = np.zeros(1).astype(np.float64)
     return (a, n, k, out)
@@ -50,7 +50,7 @@ def main():
     #     api_client=DeepSeekAPIClient(),
     #     err_tol=1e-6,
     #     max_iterations=10,
-    #     benchmark_runs=100,
+    #     benchmark_runs=250,
     #     output_dir=output_dir,
     # ).optimize()
 
@@ -67,8 +67,8 @@ def main():
         bar_inputs,
         api_client=DeepSeekAPIClient(),
         err_tol=1e-6,
-        max_iterations=10,
-        benchmark_runs=100,
+        max_iterations=20,
+        benchmark_runs=200,
         output_dir=output_dir,
     ).optimize()
 

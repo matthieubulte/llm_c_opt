@@ -1,9 +1,5 @@
-"""
-Base API client for the NumPy-to-C optimizer.
-"""
-
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any
+from typing import Optional
 
 
 class BaseAPIClient(ABC):
