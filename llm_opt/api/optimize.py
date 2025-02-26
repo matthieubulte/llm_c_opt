@@ -2,12 +2,8 @@
 Main API for the NumPy-to-C optimizer.
 """
 
-import os
-from typing import Callable, Dict, Optional, Any
+from typing import Callable, Optional
 
-import numpy as np
-
-from llm_opt.utils.logging_config import logger
 from llm_opt.utils.helpers import ensure_directory_exists
 from llm_opt.core.optimizer import LLMOptimizer
 from llm_opt.api.clients import BaseAPIClient
@@ -61,5 +57,4 @@ def optimize(
         return optimizer.c_function
 
     # If optimization failed or c_function is not available
-    logger.error(f"Failed to optimize {func.__name__}")
     raise Exception(f"Failed to optimize {func.__name__}")

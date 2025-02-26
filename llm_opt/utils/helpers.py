@@ -3,10 +3,8 @@ Helper functions for the NumPy-to-C optimizer.
 """
 
 import os
-import hashlib
-import inspect
 import numpy as np
-from typing import Callable, Dict, Any, List, Tuple
+from typing import Any, Tuple
 
 
 def ensure_directory_exists(directory: str) -> None:

@@ -1,8 +1,3 @@
-#!/usr/bin/env python3
-"""
-Optimizer for the NumPy-to-C optimizer.
-"""
-
 import os
 import time
 import inspect
@@ -201,13 +196,7 @@ class LLMOptimizer(Optimizer):
         self.artifact_logger = LLMOptimizerArtifactLogger(self.run_dir, self.func_name)
         self.api_client = api_client or DeepSeekAPIClient()
 
-    # def _get_next_fn(self, )
-
     def optimize(self) -> Optional[str]:
-        """
-        Run the optimization loop to translate the NumPy function to optimized C.
-        """
-
         initial_prompt = gen_initial_prompt(self.numpy_source, self.signature_str)
 
         logger.info(f"Starting optimization loop for function {self.func_name}")
@@ -265,7 +254,6 @@ class LLMOptimizer(Optimizer):
                     f"No improvement in iteration {iteration + 1}. Best performance: {self.best_performance:.6f} seconds"
                 )
 
-            # Generate the next prompt with feedback
             if iteration < self.max_iterations - 1:
                 feedback = self._generate_feedback(test_results)
                 current_prompt = gen_update_prompt(
@@ -274,8 +262,6 @@ class LLMOptimizer(Optimizer):
                     c_implementation,
                     feedback,
                 )
-
-        # Return the best implementation
         return self.best_implementation
 
     def _generate_feedback(self, test_results: Dict[str, Any]) -> str:
