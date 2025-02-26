@@ -3,11 +3,11 @@ import time
 import inspect
 import datetime
 import numpy as np
-import json
-from typing import Callable, Dict, Optional, Any, List
+from typing import Callable, Optional
+import hashlib
 
 from llm_opt.utils.logging_config import logger
-from llm_opt.utils.helpers import compare_outputs, ensure_directory_exists
+from llm_opt.utils.helpers import assert_outputs_equal, ensure_directory_exists
 from llm_opt.core.signature import Signature
 from llm_opt.core.c_function import CFunction
 from llm_opt.utils.prompts import gen_initial_prompt, gen_update_prompt
@@ -28,6 +28,7 @@ class Optimizer:
         signature: Signature,
         test_input_generator: Callable,
         api_client: BaseAPIClient,
+        err_tol: float = 1e-8,
         max_iterations: int = 5,
         benchmark_runs: int = 100,
         output_dir: str = "results",
@@ -38,7 +39,9 @@ class Optimizer:
         self.benchmark_runs = benchmark_runs
         self.numpy_source = inspect.getsource(func)
         self.test_input_generator = test_input_generator
+        self.err_tol = err_tol
         self.best_artifact = None
+        self.seen_implementations_hashes = set()
 
         # Create a unique run folder
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -48,10 +51,9 @@ class Optimizer:
         # Create directory structure
         ensure_directory_exists(self.run_dir)
         ensure_directory_exists(os.path.join(self.run_dir, "iterations"))
-        ensure_directory_exists(os.path.join(self.run_dir, "logs"))
 
         # Set up a file logger for this run
-        self.log_file = os.path.join(self.run_dir, "logs", "optimization.log")
+        self.log_file = os.path.join(self.run_dir, "optimization.log")
         self._setup_file_logger()
 
         logger.info(f"Created run directory: {self.run_dir}")
@@ -80,8 +82,8 @@ class Optimizer:
         current_prompt = initial_prompt
 
         for iteration in range(self.max_iterations):
-            logger.info(f"\nStarting iteration {iteration + 1}/{self.max_iterations}")
-
+            logger.info(f"Starting iteration {iteration + 1}/{self.max_iterations}")
+            logger.info(f"Querying LLM API")
             response = self.api_client.call_api(current_prompt)
             if not response:
                 logger.error("Failed to get response from API")
@@ -89,6 +91,12 @@ class Optimizer:
 
             # Extract the C implementation
             c_implementation = extract_code_from_response(response)
+            implementation_hash = hashlib.sha256(c_implementation.encode()).hexdigest()
+            if implementation_hash in self.seen_implementations_hashes:
+                logger.info("Implementation proposed already seen, skipping")
+                continue
+            self.seen_implementations_hashes.add(implementation_hash)
+
             c_function = CFunction(self.func.__name__, self.signature, c_implementation)
 
             artifact = IterationArtifact(
@@ -98,7 +106,7 @@ class Optimizer:
                 response,
             )
 
-            # Test it
+            logger.info(f"Testing implementation.")
             self.test_function(c_function, artifact)
 
             # Save iteration artifacts
@@ -116,6 +124,9 @@ class Optimizer:
             else:
                 logger.info(f"No improvement in iteration {iteration + 1}.")
 
+            if self.best_artifact:
+                self.artifacts.checkpoint(self.best_artifact)
+
             if iteration < self.max_iterations - 1:
                 current_prompt = gen_update_prompt(
                     self.numpy_source,
@@ -123,21 +134,25 @@ class Optimizer:
                     self.artifacts.to_str(),
                 )
 
+        logger.info("=" * 80)
+        logger.info(f"Best implementation\n {self.best_artifact.short_desc()}")
+        logger.info("=" * 80)
         return self.best_artifact
 
     def test_function(self, c_function: CFunction, artifact: IterationArtifact):
         try:
             c_function.compile_and_load()
         except Exception as e:
-            logger.error(f"Error compiling and loading C function: {e}", exc_info=True)
+            err_str = f"Error compiling and loading C function: {e}"
+            logger.error(err_str, exc_info=True)
             artifact.success = False
-            artifact.error = str(e)
+            artifact.error = err_str
             return
 
-        verification_passed = self.verify_against_numpy(c_function)
+        verification_passed, err_str = self.verify_against_numpy(c_function)
         if not verification_passed:
             artifact.success = False
-            artifact.error = "Verification failed"
+            artifact.error = err_str
             return
 
         artifact.performance_report = self.eval_performance(c_function)
@@ -162,30 +177,33 @@ class Optimizer:
 
         return perf_report
 
-    def verify_against_numpy(self, c_function: CFunction) -> bool:
+    def verify_against_numpy(self, c_function: CFunction) -> tuple[bool, Optional[str]]:
         """
         Verify the C implementation against the original NumPy function.
         Generate test data, run both implementations, and compare results.
         """
         try:
-            test_inputs_tuple = self.test_input_generator()
+            for _ in range(self.benchmark_runs):
+                test_inputs_tuple = self.test_input_generator()
 
-            np_args = [np.copy(arg) for arg in test_inputs_tuple]
-            np_output = np_args[-1]
+                np_args = [np.copy(arg) for arg in test_inputs_tuple]
+                np_output = np_args[-1]
 
-            c_args_np = [np.copy(arg) for arg in test_inputs_tuple]
-            c_args = self.signature.python_args_to_c_args(c_args_np)
-            c_output = c_args_np[-1]
+                c_args_np = [np.copy(arg) for arg in test_inputs_tuple]
+                c_args = self.signature.python_args_to_c_args(c_args_np)
+                c_output = c_args_np[-1]
 
-            self.func(*np_args)
-            c_function(*c_args)
+                self.func(*np_args)
+                c_function(*c_args)
 
-            match, _ = compare_outputs(np_output, c_output)
-            return match
+                assert_outputs_equal(np_output, c_output, self.err_tol)
+
+            return True, None
 
         except Exception as e:
-            logger.error(f"Error during verification: {e}", exc_info=True)
-            return False
+            err_str = f"Error during verification:\n {e}"
+            logger.error(err_str, exc_info=True)
+            return False, err_str
 
     def _setup_file_logger(self):
         """Set up a file handler for logging to the run directory."""

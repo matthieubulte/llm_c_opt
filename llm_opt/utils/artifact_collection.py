@@ -1,10 +1,12 @@
 import os
 import json
-from typing import Dict, Any
+from typing import Dict, Any, List
+from datetime import datetime
 
 from llm_opt.utils.logging_config import logger
 from llm_opt.utils.helpers import ensure_directory_exists
 from llm_opt.core.iteration_artifact import IterationArtifact
+from llm_opt.utils.artifacts_to_html import to_html
 
 
 class ArtifactCollection:
@@ -69,3 +71,10 @@ class ArtifactCollection:
         # Log the results
         logger.info(f"Iteration {artifact.idx} results:")
         logger.info(f"\tShort desc results: {artifact.short_desc()}")
+
+    def checkpoint(self, best_artifact: IterationArtifact):
+        html_path = os.path.join(self.run_dir, "artifacts.html")
+        logger.info(f"Saving artifacts to {html_path}")
+        to_html(self.artifacts, html_path)
+        with open(os.path.join(self.run_dir, "best_artifact.txt"), "w") as f:
+            f.write(best_artifact.short_desc())

@@ -23,7 +23,7 @@ class IterationArtifact:
 
     def short_desc(self):
         return (
-            ("=" * 20)
+            ("=" * 80)
             + f"""
 Iteration {self.idx}
 Implementation: {self.c_code}

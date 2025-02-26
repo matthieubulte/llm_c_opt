@@ -47,6 +47,7 @@ class CFunction:
             "-march=native",
             "-ftree-vectorize",
             "-ffast-math",
+            "-funroll-loops",
         ]
 
         with open(c_file, "w") as f:

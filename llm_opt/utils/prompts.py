@@ -1,3 +1,6 @@
+from llm_opt.utils.constants import SYSTEM_INFO
+
+
 def gen_initial_prompt(numpy_source, function_signature):
     return f"""
         I need you to translate the following NumPy function to an optimized C implementation:
@@ -34,10 +37,17 @@ def gen_update_prompt(numpy_source, function_signature, artifacts_str):
             Here are artifacts from previous iterations:
 {artifacts_str}
             
+
+            Here are Informations about the system:
+{SYSTEM_INFO}
+
+            Your code will be compiled with the following command:
+            gcc main.c -o main -O3 -march=native -ftree-vectorize -ffast-math
+
             Consider exploring these optimization techniques:
             
             Vectorization:
-            - Use SIMD instructions (SSE, AVX, NEON) for parallel operations
+            - Use SIMD instructions (you're running on an M1 chip) for parallel operations
             - Align data to vector boundaries for efficient SIMD access
             - Vectorize inner loops where possible
             

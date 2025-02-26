@@ -17,7 +17,7 @@ def ensure_directory_exists(directory: str) -> None:
     os.makedirs(directory, exist_ok=True)
 
 
-def compare_outputs(numpy_output: Any, c_output: Any) -> Tuple[bool, float]:
+def assert_outputs_equal(numpy_output: Any, c_output: Any, err_tol: float):
     """
     Compare the outputs of the NumPy and C implementations.
 
@@ -28,12 +28,13 @@ def compare_outputs(numpy_output: Any, c_output: Any) -> Tuple[bool, float]:
     Returns:
         A tuple of (match, max_difference)
     """
-    if isinstance(numpy_output, np.ndarray):
-        max_diff = np.max(np.abs(numpy_output - c_output))
-        return max_diff < 1e-10, float(max_diff)
-    else:
-        # Convert to numpy arrays for consistent comparison
-        numpy_output_arr = np.array([numpy_output])
-        c_output_arr = np.array([c_output[0]])
-        match = np.allclose(numpy_output_arr, c_output_arr, rtol=1e-10, atol=1e-10)
-        return match, 0.0 if match else 1.0
+    max_diff = np.max(np.abs(numpy_output - c_output))
+    if max_diff > err_tol:
+        raise ValueError(
+            f"""
+        The outputs of the NumPy and C implementations are not equal.
+        Max difference: {max_diff}
+        NumPy output: {numpy_output}
+        C output: {c_output}
+        """
+        )
