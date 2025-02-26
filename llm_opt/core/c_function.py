@@ -48,6 +48,9 @@ class CFunction:
             "-ftree-vectorize",
             "-ffast-math",
             "-funroll-loops",
+            "-I/opt/OpenBLAS/include",
+            "-L/opt/OpenBLAS/lib",
+            "-lopenblas",
         ]
 
         with open(c_file, "w") as f:

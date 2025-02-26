@@ -42,7 +42,7 @@ def gen_update_prompt(numpy_source, function_signature, artifacts_str):
 {SYSTEM_INFO}
 
             Your code will be compiled with the following command:
-            gcc main.c -o main -O3 -march=native -ftree-vectorize -ffast-math
+            gcc main.c -o main -O3 -march=native -ftree-vectorize -ffast-math -I/opt/OpenBLAS/include -L/opt/OpenBLAS/lib -lopenblas
 
             Consider exploring these optimization techniques:
             
@@ -68,5 +68,6 @@ def gen_update_prompt(numpy_source, function_signature, artifacts_str):
 
             
             Please provide an improved implementation.
+            Do not forget to import any necessary libraries.
             Return ONLY the C function implementation in ```c ... ``` tags, not the entire file.
             """
