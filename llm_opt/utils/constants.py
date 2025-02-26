@@ -8,18 +8,14 @@ import numpy as np
 import ctypes
 from typing import Dict
 
+from llm_opt.utils.helpers import ensure_directory_exists
+
 # DeepSeek API configuration
 DEEPSEEK_API_KEY = os.environ.get("DEEPSEEK_API_KEY")
 DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
 
-# Cache directory for storing compiled functions
-CACHE_DIR = os.environ.get(
-    "CACHE_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache")
-)
-os.makedirs(CACHE_DIR, exist_ok=True)
-
 # Mapping of NumPy dtypes to C types
-DTYPE_TO_CTYPE: Dict[type, str] = {
+DTYPE_TO_CTYPE_STR: Dict[type, str] = {
     np.float32: "float",
     np.float64: "double",
     np.int32: "int",

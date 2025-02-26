@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 DeepSeek API client for the NumPy-to-C optimizer.
 """
@@ -10,7 +9,7 @@ from typing import Optional, Dict, Any
 
 from llm_opt.utils.logging_config import logger
 from llm_opt.utils.constants import DEEPSEEK_API_KEY, DEEPSEEK_API_URL
-from llm_opt.api.base_client import BaseAPIClient, extract_code_from_response
+from llm_opt.api.clients.base import BaseAPIClient, extract_code_from_response
 
 
 class DeepSeekAPIClient(BaseAPIClient):

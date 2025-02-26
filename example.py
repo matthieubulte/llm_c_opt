@@ -1,91 +1,41 @@
-#!/usr/bin/env python3
-"""
-Example usage of the NumPy-to-C optimizer with structured output.
-"""
-
 import numpy as np
 import time
 import logging
-import os
-import sys
-import json
-import datetime
+import argparse
 from typing import Callable, Dict, Any, Tuple
 
-from llm_opt import optimize
+from llm_opt import optimize, DeepSeekAPIClient, BaseAPIClient
+from llm_opt.utils.logging_config import setup_logging
+from llm_opt.utils.helpers import ensure_directory_exists
+from llm_opt.core.signature import Signature
+from llm_opt.core.type_interface import DOUBLE
 
 # Get the logger for this module
 logger = logging.getLogger(__name__)
 
 
-# Configure logging to show detailed logs
-def setup_logging():
-    # Create logs directory if it doesn't exist
-    os.makedirs("logs", exist_ok=True)
-
-    # Get the root logger
-    root_logger = logging.getLogger()
-    root_logger.setLevel(logging.DEBUG)
-
-    # Clear existing handlers
-    for handler in list(root_logger.handlers):
-        root_logger.removeHandler(handler)
-
-    # Create formatters
-    console_formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-    file_formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(funcName)s - %(message)s"
-    )
-
-    # Create console handler for debug+ messages
-    console_handler = logging.StreamHandler(sys.stdout)
-    console_handler.setLevel(logging.DEBUG)
-    console_handler.setFormatter(console_formatter)
-    root_logger.addHandler(console_handler)
-
-    # Create file handler for detailed logging
-    log_file = os.path.join("logs", f"example_{time.strftime('%Y%m%d_%H%M%S')}.log")
-    file_handler = logging.FileHandler(log_file)
-    file_handler.setLevel(logging.DEBUG)
-    file_handler.setFormatter(file_formatter)
-    root_logger.addHandler(file_handler)
-
-    print(f"Logging to {log_file}")
-    logging.info("Logging initialized")
-
-    return log_file
-
-
-def vec_add(a, b):
-    return a + b
+def vec_add(a, b, out):
+    out[0] = np.linalg.norm(a + b)
 
 
 def vec_add_inputs():
+    """Generate test inputs for vec_add."""
     n = 10_000_000
     a = np.random.rand(n).astype(np.float64)
     b = np.random.rand(n).astype(np.float64)
-    return (a, b)
-
-
-def sum_of_squares(x):
-    return np.sum(x * x)
-
-
-def sum_of_squares_inputs():
-    n = 10_000_000
-    x = np.random.rand(n).astype(np.float64)
-    return (x,)
+    out = np.zeros(1).astype(np.float64)
+    return (a, b, out)
 
 
 def run_example(
     name: str,
     func: Callable,
     args: Tuple,
-    input_types: Dict[str, np.dtype],
+    signature: Signature,
     test_input_generator: Callable,
+    api_client: BaseAPIClient,
     max_iterations: int = 3,
+    benchmark_runs: int = 100,
     output_dir: str = "results",
 ):
     """Run an example function and its optimized version with structured output."""
@@ -104,10 +54,12 @@ def run_example(
     try:
         optimized_func = optimize(
             func,
-            input_types=input_types,
-            test_input_generator=test_input_generator,
-            max_iterations=max_iterations,
-            output_dir=output_dir,
+            signature,
+            test_input_generator,
+            max_iterations,
+            benchmark_runs,
+            output_dir,
+            api_client,
         )
 
         # Benchmark the optimized function
@@ -153,43 +105,43 @@ def run_example(
 
 
 def main():
-    # Set up logging first
-    setup_logging()
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description="Run NumPy-to-C optimizer examples")
+    parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
+    args = parser.parse_args()
+
+    # Set up logging
+    log_level = "DEBUG" if args.verbose else "INFO"
+    log_file = setup_logging(log_level)
+    print(f"Logging to {log_file}")
 
     # Create results directory if it doesn't exist
     results_dir = "results"
-    os.makedirs(results_dir, exist_ok=True)
+    ensure_directory_exists(results_dir)
 
     print("NumPy-to-C Optimizer Examples")
     print("============================")
     logging.info("Starting NumPy-to-C Optimizer Examples")
 
+    api_client = DeepSeekAPIClient()
+
     # Example 1: Vector addition
-    a, b = vec_add_inputs()
+    a, b, out = vec_add_inputs()
     run_example(
         "vec_add",
         vec_add,
-        (a, b),
-        {
-            "a": np.dtype(np.float64),
-            "b": np.dtype(np.float64),
-        },
+        (a, b, out),
+        Signature(
+            [
+                ("a", DOUBLE.array_of()),
+                ("b", DOUBLE.array_of()),
+                ("out", DOUBLE.array_of()),
+            ]
+        ),
         test_input_generator=vec_add_inputs,
-        max_iterations=3,
-        output_dir=results_dir,
-    )
-
-    # Example 2: Sum of squares
-    (x,) = sum_of_squares_inputs()
-    run_example(
-        "sum_of_squares",
-        sum_of_squares,
-        (x,),
-        {
-            "x": np.dtype(np.float64),
-        },
-        test_input_generator=sum_of_squares_inputs,
-        max_iterations=3,
+        api_client=api_client,
+        max_iterations=5,
+        benchmark_runs=100,
         output_dir=results_dir,
     )
 

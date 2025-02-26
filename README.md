@@ -48,104 +48,102 @@ import numpy as np
 from llm_opt import optimize
 
 # Define a NumPy function
-def matrix_power(x, n):
-    """Compute the nth power of a square matrix."""
-    result = np.eye(x.shape[0], dtype=x.dtype)
-    temp = x.copy()
-    
-    while n > 0:
-        if n % 2 == 1:
-            result = np.dot(result, temp)
-        temp = np.dot(temp, temp)
-        n //= 2
-    
-    return result
+def sum_of_squares(x):
+    return np.sum(x * x)
 
-# Define a test input generator
-def matrix_power_inputs():
-    """Generate test inputs for matrix_power function."""
-    return (np.random.rand(10, 10), 5)
+# Define input types
+input_types = {"x": np.dtype(np.float64)}
+
+# Define a function to generate test inputs
+def test_input_generator():
+    n = 1000
+    x = np.random.rand(n).astype(np.float64)
+    return (x,)
 
 # Optimize the function
-optimized_matrix_power = optimize(
-    matrix_power,
-    input_types={"x": np.dtype(np.float64), "n": np.dtype(np.int32)},
-    test_input_generator=matrix_power_inputs
+optimized_func = optimize(
+    sum_of_squares,
+    input_types=input_types,
+    test_input_generator=test_input_generator,
+    max_iterations=3,
+    output_dir="results",
 )
 
 # Use the optimized function
-A = np.random.rand(1000, 1000)
-result = optimized_matrix_power(A, 10)
+x = np.random.rand(1000).astype(np.float64)
+result = optimized_func(x)
 ```
 
-### Command-line Usage
+### Using a Mock API Client for Testing
 
-Run the example optimization:
+```python
+from llm_opt import optimize, MockAPIClient
+
+# Create a mock API client
+mock_client = MockAPIClient()
+
+# Add a predefined response
+mock_client.add_response(
+    "test prompt",
+    """
+    ```c
+    void sum_of_squares(double* x, int x_size, double* output, int output_size) {
+        double sum = 0.0;
+        for (int i = 0; i < x_size; i++) {
+            sum += x[i] * x[i];
+        }
+        output[0] = sum;
+    }
+    ```
+    """
+)
+
+# Optimize the function using the mock client
+optimized_func = optimize(
+    sum_of_squares,
+    input_types=input_types,
+    test_input_generator=test_input_generator,
+    max_iterations=3,
+    output_dir="results",
+    api_client=mock_client,
+)
+```
+
+### Running the Example
+
+The repository includes an example script that demonstrates the optimizer with two functions:
 
 ```bash
-./run.sh
+python example.py
+```
+
+To use a mock API client instead of the real DeepSeek API:
+
+```bash
+python example.py --mock
 ```
 
 ## Project Structure
 
-The project is organized into the following modules:
-
 - `llm_opt/`: Main package directory
-  - `__init__.py`: Package initialization and exports
-  - `main.py`: Main module with the `optimize` function
-  - `core/`: Core functionality
-    - `analyzer.py`: Function analysis
-    - `signature.py`: C function signature generation
-    - `compiler.py`: C compilation utilities
-    - `optimizer.py`: DeepSeek optimization loop
-    - `loader.py`: Function loading utilities
-  - `api/`: API clients
-    - `deepseek.py`: DeepSeek API client
-  - `utils/`: Utility modules
-    - `constants.py`: Constants and type mappings
-    - `logging_config.py`: Logging configuration
-- `example.py`: Example usage of the optimizer
-- `run.sh`: Script to run the example optimization
+  - `api/`: API client implementations
+  - `core/`: Core optimizer functionality
+  - `utils/`: Utility functions and constants
+- `tests/`: Test suite
+- `example.py`: Example usage
 
-## Optimization Techniques
+## Testing
 
-The system applies various optimization techniques:
+Run the test suite with:
 
-1. **Vectorization**
-   - Use SIMD instructions (SSE, AVX, NEON)
-   - Optimize for specific CPU architectures
-
-2. **Memory Access Optimization**
-   - Cache blocking/tiling
-   - Data alignment
-   - Prefetching
-
-3. **Loop Optimization**
-   - Loop unrolling
-   - Loop fusion
-   - Loop interchange
-
-4. **Algorithm Improvements**
-   - Specialized algorithms for common patterns
-   - Mathematical simplifications
-   - Numerical approximations when appropriate
-
-5. **Parallelization**
-   - Multi-threading for large computations
-   - Task parallelism for independent operations
-
-## Advantages Over Numba
-
-1. **Iterative Refinement**: Unlike Numba's one-pass compilation, our approach iteratively improves the implementation.
-2. **Hardware-Specific Optimization**: Tailors optimizations to the specific hardware.
-3. **Feedback-Driven**: Uses performance feedback to guide optimization decisions.
-4. **Explainable**: Provides insights into the optimizations applied.
-5. **Extensible**: Can incorporate new optimization techniques as they are developed.
-
-## Inspiration
-
-This project is inspired by NVIDIA's experiment where they used DeepSeek-R1 with a feedback mechanism during inference to generate optimized GPU attention kernels. The approach demonstrated that by allocating additional computational resources during inference and implementing a feedback loop, AI models can produce increasingly optimized code.
+```bash
+python -m unittest discover tests
+```
 
 ## License
 
-MIT
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Acknowledgements
+
+This project was inspired by NVIDIA's inference-time scaling approach and the Numba project.
