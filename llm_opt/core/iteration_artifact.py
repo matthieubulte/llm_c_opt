@@ -10,7 +10,7 @@ class IterationArtifact:
         prompt: str,
         response: str,
         performance_report: Optional[PerformanceReport] = None,
-        success: bool = True,
+        success: Optional[bool] = None,
         error: Optional[str] = None,
     ):
         self.idx = idx

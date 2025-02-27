@@ -1,8 +1,7 @@
 import os
 import json
-from typing import List, Dict, Any
-import base64
-from llm_opt.core.performance_report import PerformanceReport
+from typing import List
+from llm_opt.utils.logging_config import logger
 from llm_opt.core.iteration_artifact import IterationArtifact
 from datetime import datetime
 
@@ -586,5 +585,5 @@ document.addEventListener('DOMContentLoaded', initPage);
     with open(out_path, "w") as f:
         f.write(html_content)
 
-    print(f"HTML visualization saved to {out_path}")
-    print(f"JavaScript file saved to {js_path}")
+    logger.info(f"HTML visualization saved to {out_path}")
+    logger.info(f"JavaScript file saved to {js_path}")

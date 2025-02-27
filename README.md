@@ -24,7 +24,8 @@ This approach is generic and can be applied to any NumPy function, making it wid
 [x] If the implementation did not change, repeat the prompt
 [x] Make it possible to use blas
 [x] do not include code of repeated artifacts
+[x] refiner should include an LLM
 
 
 [ ] Maybe give up after a certain number of iterations without improvement?
-[ ] verifier should include an LLM
+[ ] Maybe it's enough to run the reference implementation only once to save time

@@ -11,7 +11,11 @@ from llm_opt.utils.logging_config import logger
 from llm_opt.utils.helpers import assert_outputs_equal, ensure_directory_exists
 from llm_opt.core.signature import Signature
 from llm_opt.core.c_function import CFunction
-from llm_opt.utils.prompts import gen_initial_prompt, gen_update_prompt
+from llm_opt.utils.prompts import (
+    gen_initial_prompt,
+    gen_update_prompt,
+    gen_feedback_prompt,
+)
 from llm_opt.api.clients import BaseAPIClient, extract_code_from_response
 from llm_opt.utils.artifact_collection import ArtifactCollection
 from llm_opt.core.iteration_artifact import IterationArtifact
@@ -84,11 +88,27 @@ class Optimizer:
             self.test_implementation(c_implementation, artifact)
             self.artifacts.checkpoint()
 
+            feedback = None
+            # if we passed the first 2 prompts, get an LLM to generate feedback
+            # maybe only get feedback if the implementation failed or if it was too slow
+            if current_prompt != initial_prompt:
+                feedback_prompt = gen_feedback_prompt(
+                    numpy_source,
+                    self.artifacts.to_str(),
+                )
+                logger.info(f"Querying LLM for feedback")
+
+                feedback = self.api_client.call_api(feedback_prompt)
+                if not feedback:
+                    logger.error("Failed to get response from API")
+                    break
+
             if iteration < self.max_iterations - 1:
                 current_prompt = gen_update_prompt(
                     numpy_source,
-                    self.signature.generate_c_function_signature(self.func.__name__),
+                    signature_str,
                     self.artifacts.to_str(),
+                    feedback,
                 )
 
         logger.info("=" * 80)

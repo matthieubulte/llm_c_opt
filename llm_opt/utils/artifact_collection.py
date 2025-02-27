@@ -1,8 +1,4 @@
 import os
-import json
-from typing import Dict, Any, List
-from datetime import datetime
-
 from llm_opt.utils.logging_config import logger
 from llm_opt.utils.helpers import ensure_directory_exists
 from llm_opt.core.iteration_artifact import IterationArtifact
@@ -71,7 +67,10 @@ class ArtifactCollection:
         )
 
     def checkpoint(self):
-        self._save_iteration_artifact(self.artifacts[-1])
+        last_artifact = self.artifacts[-1]
+        if last_artifact.success is None:
+            last_artifact.success = True
+        self._save_iteration_artifact(last_artifact)
         html_path = os.path.join(self.run_dir, "artifacts.html")
         logger.info(f"Saving artifacts to {html_path}")
         to_html(self.artifacts, html_path)
