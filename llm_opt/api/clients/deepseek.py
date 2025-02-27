@@ -69,18 +69,3 @@ class DeepSeekAPIClient(BaseAPIClient):
         except Exception as e:
             logger.error(f"Unexpected error calling DeepSeek API: {e}", exc_info=True)
             return None
-
-
-# For backward compatibility
-def call_deepseek_api(prompt: str) -> Optional[str]:
-    """
-    Call the DeepSeek API with the given prompt.
-
-    Args:
-        prompt: The prompt to send to the DeepSeek API
-
-    Returns:
-        The response from the DeepSeek API or None if an error occurred
-    """
-    client = DeepSeekAPIClient()
-    return client.call_api(prompt)

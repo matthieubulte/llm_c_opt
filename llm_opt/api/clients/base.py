@@ -31,4 +31,4 @@ def extract_code_from_response(response: Optional[str]) -> str:
         if len(code_blocks) > 1:
             return code_blocks[1].split("```")[0].strip()
 
-    raise ValueError("No ```c ... ``` code block found in the response")
+    raise ValueError(f"No ```c ... ``` code block found in the response:\n{response}")

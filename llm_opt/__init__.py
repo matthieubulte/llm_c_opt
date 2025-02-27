@@ -14,7 +14,12 @@ from llm_opt.core.signature import Signature
 from llm_opt.core.optimizer import Optimizer
 
 # API clients
-from llm_opt.api.clients import BaseAPIClient, DeepSeekAPIClient, MockAPIClient
+from llm_opt.api.clients import (
+    BaseAPIClient,
+    DeepSeekAPIClient,
+    MockAPIClient,
+    GroqAPIClient,
+)
 
 __all__ = [
     # Core components
@@ -25,4 +30,5 @@ __all__ = [
     "BaseAPIClient",
     "DeepSeekAPIClient",
     "MockAPIClient",
+    "GroqAPIClient",
 ]

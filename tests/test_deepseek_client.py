@@ -44,24 +44,6 @@ class TestDeepSeekAPIClient(unittest.TestCase):
         # Check that the response is None
         self.assertIsNone(response)
 
-    @patch("llm_opt.api.clients.deepseek.DeepSeekAPIClient")
-    def test_call_deepseek_api(self, mock_client_class):
-        """Test the call_deepseek_api function."""
-        # Mock the client
-        mock_client = MagicMock()
-        mock_client.call_api.return_value = "test response"
-        mock_client_class.return_value = mock_client
-
-        # Call the function
-        response = call_deepseek_api("test prompt")
-
-        # Check that the response is correct
-        self.assertEqual(response, "test response")
-
-        # Check that the client was created and called
-        mock_client_class.assert_called_once()
-        mock_client.call_api.assert_called_once_with("test prompt")
-
     def test_extract_code_from_response_markdown(self):
         """Test extracting code from a markdown response."""
         response = """

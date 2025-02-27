@@ -33,6 +33,7 @@ class Optimizer:
         max_iterations: int = 5,
         benchmark_runs: int = 100,
         output_dir: str = "results",
+        get_feedback: bool = False,
     ):
         self.func = func
         self.signature = signature
@@ -41,6 +42,7 @@ class Optimizer:
         self.err_tol = err_tol
         self.max_iterations = max_iterations
         self.benchmark_runs = benchmark_runs
+        self.get_feedback = get_feedback
 
         self.seen_implementations_hashes = set()
 
@@ -58,9 +60,17 @@ class Optimizer:
         numpy_source = inspect.getsource(self.func)
         initial_prompt = gen_initial_prompt(numpy_source, signature_str)
 
-        logger.info(f"Starting optimization loop for function {self.func.__name__}")
-        logger.info(f"Function source:\n{numpy_source}")
-        logger.info(f"Function signature:\n{signature_str}")
+        logger.info(f"Run information:")
+        logger.info(f"\tFunction source: {numpy_source}")
+        logger.info(f"\tSignature: {signature_str}")
+        logger.info(
+            f"\tInput generator: {inspect.getsource(self.test_input_generator)}"
+        )
+        logger.info(f"\tAPI client: {self.api_client.__class__.__name__}")
+        logger.info(f"\tError tolerance: {self.err_tol}")
+        logger.info(f"\tMax iterations: {self.max_iterations}")
+        logger.info(f"\tBenchmark runs: {self.benchmark_runs}")
+        logger.info(f"\tGet feedback: {self.get_feedback}")
 
         for _ in range(self.benchmark_runs):
             self.func(*self.test_input_generator())
@@ -76,6 +86,15 @@ class Optimizer:
                 break
 
             c_implementation = extract_code_from_response(response)
+            c_implementation = f"""
+#include <math.h>
+#include <stdlib.h>
+#include <string.h>
+#include <arm_neon.h>
+#include <cblas.h>
+
+{c_implementation}
+            """
             artifact = IterationArtifact(
                 iteration + 1,
                 c_implementation,
@@ -91,7 +110,11 @@ class Optimizer:
             feedback = None
             # if we passed the first 2 prompts, get an LLM to generate feedback
             # maybe only get feedback if the implementation failed or if it was too slow
-            if current_prompt != initial_prompt:
+            if (
+                self.get_feedback
+                and current_prompt != initial_prompt
+                and iteration < self.max_iterations - 1
+            ):
                 feedback_prompt = gen_feedback_prompt(
                     numpy_source,
                     self.artifacts.to_str(),

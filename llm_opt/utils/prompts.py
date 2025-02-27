@@ -39,8 +39,6 @@ An LLM loop is currently trying to optimize the C implementation of the followin
 {numpy_source}
 ```
 
-The target LLM does not have access to any tool or can control the compiling process. It can only provide the C implementation.
-
 SYSTEM INFO
 {SYSTEM_INFO}
 
@@ -48,9 +46,13 @@ COMPILATION COMMAND
 gcc main.c -o main -O3 -march=native -ftree-vectorize -ffast-math -I/opt/OpenBLAS/include -L/opt/OpenBLAS/lib -lopenblas -framework Accelerate
 
 TASK
-I want you to take the feedback from the previous iterations and provide list of takeaways and suggestions for the next iteration.
-Your goal is to help the LLM loop to find the best possible C implementation, not to implement the function yourself.
-The structure of the feedback should be as follows:
+- I want you to take the evaluations from the previous iterations and provide list of feedbacks for the next iteration.
+- Your goal is to help the LLM loop to find the best possible C implementation, not to implement the function yourself.
+- The target LLM does not have access to any external tool or can control the compiling process. It can only provide the C implementation.
+- The target LLM does not have access to its previous iterations and will only rely on your feedback.
+- If you realize that the implementation is not improving, be creative and explore new ways to optimize the code.
+- Think multi-steps ahead, experiment, be creative.
+- The structure of the feedback should be as follows:
 
 ```
 ## Bugs that were encountered
@@ -127,14 +129,14 @@ You are the world's leading expert on optimizing C code, with years of experienc
 
 gcc main.c -o main -O3 -march=native -ftree-vectorize -ffast-math -I/opt/OpenBLAS/include -L/opt/OpenBLAS/lib -lopenblas -framework Accelerate
 
+The following headers are already included: <math.h>, <stdlib.h>, <string.h>, <arm_neon.h>, <cblas.h>
+
 ================================================================================ FEEDBACK
 {feedback_str}
 
 ================================================================================ FINAL INSTRUCTIONS
-Provide an improved implementation.
-Do not forget to import any necessary libraries.
-Return ONLY the C function implementation in ```c ... ``` tags, not the entire file.
-Do not repeat the same implementation as in the previous iterations. Any repeated implementation will be penalized.
-If you realize that the implementation is not improving, be creative and explore new ways to optimize the code.
-Make sure to pay attention to the previous iterations and their errors and performance analysis. Very important!!!
+- Provide an improved implementation.
+- Do not forget to import any necessary libraries.
+- Return ONLY the C function implementation in ```c ... ``` tags, not the entire file.
+- Make sure to pay attention to the previous iterations and their errors and performance analysis. Very important!!!
 """
