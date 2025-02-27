@@ -12,7 +12,7 @@ The NumPy-to-C Optimizer provides a generic approach for translating NumPy funct
 4. Iteratively optimize the C implementation using feedback
 5. Provide a Python wrapper to call the optimized C function
 
-This approach is generic and can be applied to any NumPy function, making it widely applicable across scientific computing, data science, and machine learning workflows.
+This approach is generic and can be applied to any NumPy function.
 
 ## To Do
 
@@ -27,5 +27,10 @@ This approach is generic and can be applied to any NumPy function, making it wid
 [x] refiner should include an LLM
 
 
-[ ] Maybe give up after a certain number of iterations without improvement?
-[ ] Maybe it's enough to run the reference implementation only once to save time
+[ ] give up after a certain number of iterations without improvement?
+[ ] it's enough to run the reference implementation only once to save time
+[ ] compare the speedup with respect to the best implementation found so far instead of the reference
+
+## Screenshot 
+
+![Screenshot of the tool](./screenshot.png)

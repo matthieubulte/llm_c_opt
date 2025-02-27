@@ -72,7 +72,7 @@ def main():
     # api_client = GroqAPIClient()
     api_client = DeepSeekAPIClient()
 
-    test_case = "matrix_convolution"
+    test_case = "foo"
     get_feedback = False
     max_iterations = 20
     benchmark_runs = 250
