@@ -14,6 +14,10 @@ The NumPy-to-C Optimizer provides a generic approach for translating NumPy funct
 
 This approach is generic and can be applied to any NumPy function.
 
+## Note on cost
+
+Working one week on this project against the DeepSeek API resulted in ~2.5M tokens over ~600 requests for a cost of $0.44. Yes, it's cheap. 
+
 ## To Do
 
 [x] The iterations should include the test results from all previous iterations
@@ -25,7 +29,6 @@ This approach is generic and can be applied to any NumPy function.
 [x] Make it possible to use blas
 [x] do not include code of repeated artifacts
 [x] refiner should include an LLM
-
 
 [ ] give up after a certain number of iterations without improvement?
 [ ] it's enough to run the reference implementation only once to save time
