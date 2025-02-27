@@ -26,8 +26,8 @@ class DeepSeekAPIClient(BaseAPIClient):
             logger.error("DEEPSEEK_API_KEY environment variable not set")
             raise ValueError("DEEPSEEK_API_KEY environment variable not set")
 
-    def call_api(self, prompt: str) -> Optional[str]:
-        """
+    def _call_api(self, prompt: str) -> Optional[str]:
+        """ "
         Call the DeepSeek API with the given prompt.
 
         Args:
@@ -61,6 +61,8 @@ class DeepSeekAPIClient(BaseAPIClient):
             return result["choices"][0]["message"]["content"]
         except requests.exceptions.RequestException as e:
             logger.error(f"Error calling DeepSeek API: {e}")
+            logger.error(f"Prompt length: {len(prompt)}")
+
             if hasattr(e, "response") and e.response is not None:
                 logger.error(f"Response status code: {e.response.status_code}")
                 logger.error(f"Response headers: {dict(e.response.headers)}")
@@ -69,3 +71,18 @@ class DeepSeekAPIClient(BaseAPIClient):
         except Exception as e:
             logger.error(f"Unexpected error calling DeepSeek API: {e}", exc_info=True)
             return None
+
+    def call_api(self, prompt: str) -> Optional[str]:
+        n_tries = 5
+        for i in range(n_tries):
+            response = self._call_api(prompt)
+            if response:
+                return response
+            else:
+                logger.error(f"Failed to get response from DeepSeek API")
+                logger.error(f"Response: {response}")
+                if i < n_tries - 1:
+                    logger.error(f"Retrying...")
+                else:
+                    logger.error(f"Failed to get response from DeepSeek API")
+                    return None
