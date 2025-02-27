@@ -1,7 +1,6 @@
 import unittest
 from unittest.mock import patch, MagicMock
 from llm_opt.api.clients import DeepSeekAPIClient, extract_code_from_response
-from llm_opt.api.clients.deepseek import call_deepseek_api
 
 
 class TestDeepSeekAPIClient(unittest.TestCase):
